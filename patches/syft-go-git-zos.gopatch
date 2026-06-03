@@ -1,0 +1,14 @@
+diff --git a/worktree_zos.go b/worktree_zos.go
+new file mode 100644
+index 0000000..cf21550
+--- /dev/null
++++ b/worktree_zos.go
+@@ -0,0 +1,8 @@
++//go:build zos
++// +build zos
++
++package git
++
++func isSymlinkWindowsNonAdmin(_ error) bool {
++	return false
++}

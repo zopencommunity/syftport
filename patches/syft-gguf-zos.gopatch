@@ -1,0 +1,23 @@
+diff --git a/util/osx/file_mmap_zos.go b/util/osx/file_mmap_zos.go
+new file mode 100644
+index 0000000..8d4ad1c
+--- /dev/null
++++ b/util/osx/file_mmap_zos.go
+@@ -0,0 +1,17 @@
++//go:build zos
++
++package osx
++
++import (
++	"os"
++
++	"golang.org/x/sys/unix"
++)
++
++func mmap(f *os.File, length int) ([]byte, error) {
++	return unix.Mmap(int(f.Fd()), 0, length, unix.PROT_READ, unix.MAP_SHARED)
++}
++
++func munmap(b []byte) (err error) {
++	return unix.Munmap(b)
++}
