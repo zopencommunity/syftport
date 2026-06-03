@@ -169,7 +169,6 @@ zopen_install()
   # GOPATH is exported by zopen_init as PORT_ROOT/go-path.
   # cd to PORT_ROOT (workspace root containing go.work and sibling module dirs)
   # regardless of what directory zopen called us from.
-  set -x
   cd "$(dirname "${GOPATH}")"
 
   if [ -n "${GOROOT:-}" ] && [ -f "${GOROOT}/bin/goz-util" ]; then
