@@ -1,0 +1,83 @@
+diff --git a/fs/copy_zos.go b/fs/copy_zos.go
+new file mode 100644
+index 0000000..944d253
+--- /dev/null
++++ b/fs/copy_zos.go
+@@ -0,0 +1,20 @@
++//go:build zos
++// +build zos
++
++package fs
++
++import (
++	"os"
++	"time"
++)
++
++func copyFileInfo(fi os.FileInfo, src, name string) error {
++	if err := os.Chmod(name, fi.Mode()); err != nil {
++		return err
++	}
++	return os.Chtimes(name, time.Now(), fi.ModTime())
++}
++
++func copyXAttrs(dst, src string, excludes map[string]struct{}, errorHandler XAttrErrorHandler) error {
++	return nil
++}
+diff --git a/fs/stat_zos.go b/fs/stat_zos.go
+new file mode 100644
+index 0000000..55b36a6
+--- /dev/null
++++ b/fs/stat_zos.go
+@@ -0,0 +1,51 @@
++//go:build zos
++// +build zos
++
++package fs
++
++import (
++	"fmt"
++	"io/fs"
++	"syscall"
++	"time"
++)
++
++func Atime(st fs.FileInfo) (time.Time, error) {
++	stSys, ok := st.Sys().(*syscall.Stat_t)
++	if !ok {
++		return time.Time{}, fmt.Errorf("expected st.Sys() to be *syscall.Stat_t, got %T", st.Sys())
++	}
++	return time.Unix(stSys.Atim.Unix()), nil
++}
++
++func Ctime(st fs.FileInfo) (time.Time, error) {
++	stSys, ok := st.Sys().(*syscall.Stat_t)
++	if !ok {
++		return time.Time{}, fmt.Errorf("expected st.Sys() to be *syscall.Stat_t, got %T", st.Sys())
++	}
++	return time.Unix(stSys.Ctim.Unix()), nil
++}
++
++func Mtime(st fs.FileInfo) (time.Time, error) {
++	stSys, ok := st.Sys().(*syscall.Stat_t)
++	if !ok {
++		return time.Time{}, fmt.Errorf("expected st.Sys() to be *syscall.Stat_t, got %T", st.Sys())
++	}
++	return time.Unix(stSys.Mtim.Unix()), nil
++}
++
++func StatAtime(st *syscall.Stat_t) syscall.Timespec {
++	return st.Atim
++}
++
++func StatCtime(st *syscall.Stat_t) syscall.Timespec {
++	return st.Ctim
++}
++
++func StatMtime(st *syscall.Stat_t) syscall.Timespec {
++	return st.Mtim
++}
++
++func StatATimeAsTime(st *syscall.Stat_t) time.Time {
++	return time.Unix(st.Atim.Unix())
++}

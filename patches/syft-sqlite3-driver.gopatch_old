@@ -1,0 +1,56 @@
+diff --git a/cmd/syft/main.go b/cmd/syft/main.go
+index f3f1136..9e2d577 100644
+--- a/cmd/syft/main.go
++++ b/cmd/syft/main.go
+@@ -1,7 +1,7 @@
+ package main
+ 
+ import (
+-	_ "github.com/glebarez/sqlite"
++	_ "github.com/mattn/go-sqlite3"
+ 
+ 	"github.com/anchore/clio"
+ 	"github.com/anchore/syft/cmd/syft/cli"
+diff --git a/go.mod b/go.mod
+index bef966d..23f7c63 100644
+--- a/go.mod
++++ b/go.mod
+@@ -31,7 +31,8 @@ require (
+ 	github.com/facebookincubator/nvdtools v0.1.5
+ 	github.com/gabriel-vasile/mimetype v1.4.13
+ 	github.com/gkampitakis/go-snaps v0.5.21
+-	github.com/glebarez/sqlite v1.11.0
++	github.com/mattn/go-sqlite3 v1.14.22
++	gorm.io/driver/sqlite v1.5.6
+ 	github.com/go-test/deep v1.1.1
+ 	github.com/go-viper/mapstructure/v2 v2.5.0
+ 	github.com/gocsaf/csaf/v3 v3.5.1
+@@ -190,7 +191,6 @@ require (
+ 	github.com/fsnotify/fsnotify v1.9.0 // indirect
+ 	github.com/github/go-spdx/v2 v2.4.0 // indirect
+ 	github.com/gkampitakis/ciinfo v0.3.2 // indirect
+-	github.com/glebarez/go-sqlite v1.22.0 // indirect
+ 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
+ 	github.com/go-git/go-billy/v5 v5.8.0 // indirect
+ 	github.com/go-git/go-git/v5 v5.18.0 // indirect
+diff --git a/cmd/syft/sqlite_zos.go b/cmd/syft/sqlite_zos.go
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/cmd/syft/sqlite_zos.go
+@@ -0,0 +1,14 @@
++//go:build zos
++
++package main
++
++import (
++	"database/sql"
++
++	"github.com/mattn/go-sqlite3"
++)
++
++func init() {
++	// syft's RPM cataloger opens with "sqlite"; go-sqlite3 registers as "sqlite3" by default.
++	sql.Register("sqlite", &sqlite3.SQLiteDriver{})
++}
+

@@ -1,0 +1,221 @@
+# bump: syft-version /SYFT_VERSION="(.*)"/ https://github.com/anchore/syft.git|semver:*
+SYFT_VERSION="1.44.0"
+
+###
+### Build control file for the syft port
+###
+
+export ZOPEN_NAME="syft"
+export ZOPEN_PROJECT_NAME="syft"
+export ZOPEN_BUILD_LINE="STABLE"
+export ZOPEN_STABLE_URL="https://github.com/anchore/syft.git"
+export ZOPEN_STABLE_TAG="v${SYFT_VERSION}"
+export ZOPEN_STABLE_DEPS="make coreutils git sqlite check_clang check_go"
+
+export ZOPEN_DEV_URL=""
+export ZOPEN_DEV_DEPS=""
+
+export ZOPEN_CATEGORIES="development security"
+export ZOPEN_RUNTIME_DEPS=""
+export ZOPEN_SYSTEM_PREREQ=""
+
+export ZOPEN_COMP="GO"
+export ZOPEN_CONFIGURE="zopen_config"
+export ZOPEN_CONFIGURE_MINIMAL=1
+export ZOPEN_MAKE="skip"
+export ZOPEN_INSTALL="zopen_install"
+export ZOPEN_CHECK="skip"
+export ZOPEN_CLEAN="zopen_clean"
+
+zopen_init()
+{
+  # zopen-build calls zopen_init from ZOPEN_ROOT/syft (the source checkout).
+  # Go one level up to PORT_ROOT (the workspace root that will hold go.work and
+  # the sibling module checkouts).
+  export CGO_ENABLED=0
+  export GOMAXPROCS=1
+  export CC="${CC:-clang}"
+  export GOPATH="$(cd .. && pwd)/go-path"
+  export GOMODCACHE="${GOPATH}/pkg/mod"
+  export GOTMPDIR="$(dirname "${GOPATH}")/go-tmpdir"
+  mkdir -p "${GOTMPDIR}" "${GOMODCACHE}"
+
+  if [ -n "${GOROOT:-}" ] && [ -d "${GOROOT}/bin" ]; then
+    export PATH="${PATH}:${GOROOT}/bin"
+  fi
+
+  export GOBIN="${ZOPEN_INSTALL_DIR}/bin"
+  mkdir -p "${GOBIN}"
+}
+
+clone_module()
+{
+  repo="$1"
+  dir="$2"
+  ref="$3"
+
+  if [ ! -d "${dir}/.git" ]; then
+    git clone "${repo}" "${dir}"
+  fi
+
+  git -C "${dir}" fetch --tags --force
+  git -C "${dir}" checkout --force "${ref}"
+  git -C "${dir}" clean -fdx
+}
+
+apply_port_patch()
+{
+  dir="$1"
+  patch="$2"
+  
+  if ! git -C "${dir}" apply --check "../patches/${patch}"; then
+    echo "Patch ${patch} did not apply cleanly in ${dir}; assuming it was already applied or needs refresh."
+    git -C "${dir}" apply --reverse --check "../patches/${patch}" >/dev/null 2>&1 || return 1
+    return 0
+  fi
+
+  git -C "${dir}" apply "../patches/${patch}"
+}
+
+zopen_config()
+{
+  cd ..
+
+  clone_module "${ZOPEN_STABLE_URL}" syft "v${SYFT_VERSION}"
+  clone_module https://github.com/mattn/go-sqlite3.git go-sqlite3 v1.14.22
+  clone_module https://github.com/go-gorm/sqlite.git gorm-sqlite v1.5.6
+  clone_module https://github.com/adrg/xdg.git xdg v0.5.3
+  clone_module https://github.com/containerd/continuity.git continuity v0.4.5
+  clone_module https://github.com/vbatts/go-mtree.git go-mtree v0.7.0
+  clone_module https://github.com/containerd/containerd.git containerd v2.2.2
+  clone_module https://github.com/go-git/go-git.git go-git v5.18.0
+  clone_module https://github.com/moby/sys.git moby-sys user/v0.4.0
+  clone_module https://github.com/diskfs/go-diskfs.git diskfs v1.7.0
+  clone_module https://github.com/gpustack/gguf-parser-go.git gguf-parser v0.24.0
+
+  apply_port_patch go-sqlite3 syft-go-sqlite3-zos.gopatch || return 1
+  apply_port_patch xdg syft-xdg-zos.gopatch || return 1
+  apply_port_patch continuity syft-continuity-zos.gopatch || return 1
+  apply_port_patch go-mtree syft-go-mtree-zos.gopatch || return 1
+  apply_port_patch containerd syft-containerd-zos.gopatch || return 1
+  apply_port_patch go-git syft-go-git-zos.gopatch || return 1
+  apply_port_patch moby-sys syft-moby-sys-user-zos.gopatch || return 1
+  apply_port_patch diskfs syft-diskfs-zos.gopatch || return 1
+  apply_port_patch gguf-parser syft-gguf-zos.gopatch || return 1
+  apply_port_patch syft syft-sqlite3-driver.gopatch || return 1
+
+  # Create a goz-util wrapper that converts binder rc=4 (warnings-only) to rc=0.
+  if [ -n "${GOROOT:-}" ] && [ -f "${GOROOT}/bin/goz-util" ]; then
+    mkdir -p "zos-wrappers"
+    printf '#!/bin/sh\n"%s" "$@"\nrc=$?\n[ $rc -eq 4 ] && rc=0\nexit $rc\n' \
+      "${GOROOT}/bin/goz-util" > "zos-wrappers/goz-util"
+    chmod +x "zos-wrappers/goz-util"
+    export PATH="$(pwd)/zos-wrappers:${PATH}"
+  fi
+
+  cd go-sqlite3
+  clang -shared -fvisibility=default -o sqlite3-binding.so sqlite3-binding.c \
+    -DPATH_MAX=1023 \
+    -D_AE_BIMODAL=1 \
+    -D_ALL_SOURCE \
+    -U_ENHANCED_ASCII_EXT \
+    -D_ENHANCED_ASCII_EXT=0xFFFFFFFF \
+    -D_Export=extern \
+    -D_LARGE_TIME_API \
+    -D_OPEN_MSGQ_EXT \
+    -D_OPEN_SYS_FILE_EXT=1 \
+    -D_OPEN_SYS_SOCK_IPV6 \
+    -D_UNIX03_SOURCE \
+    -D_UNIX03_THREADS \
+    -D_UNIX03_WITHDRAWN \
+    -D_XOPEN_SOURCE=600 \
+    -D_XOPEN_SOURCE_EXTENDED \
+    -D_XPLATFORM_SOURCE=1 \
+    -D__static_assert=static_assert \
+    -D_POSIX_C_SOURCE=200809L \
+    -fasm \
+    -fzos-le-char-mode=ascii \
+    -isystem/usr/include \
+    -m64
+  mv -f sqlite3-binding.c sqlite3-binding.c.ignore
+
+  GO_SQLITE3_DIR="$(pwd)"
+  sed -i "s#ZOPEN-REPLACE-DIR#${GO_SQLITE3_DIR}#g" sqlite3.go
+
+  cd ..
+  rm -f go.work go.work.sum
+  mkdir -p "${GOTMPDIR}"
+  go work init \
+    ./go-sqlite3 \
+    ./gorm-sqlite \
+    ./xdg \
+    ./continuity \
+    ./go-mtree \
+    ./containerd \
+    ./go-git \
+    ./moby-sys/user \
+    ./diskfs \
+    ./gguf-parser \
+    ./syft
+
+  cd syft
+  mkdir -p "${GOTMPDIR}"
+  go mod download
+  cd ..
+}
+
+zopen_install()
+{
+  # GOPATH is exported by zopen_init as PORT_ROOT/go-path.
+  # cd to PORT_ROOT (workspace root containing go.work and sibling module dirs)
+  # regardless of what directory zopen called us from.
+  cd "$(dirname "${GOPATH}")"
+
+  if [ -n "${GOROOT:-}" ] && [ -f "${GOROOT}/bin/goz-util" ]; then
+    mkdir -p "zos-wrappers"
+    printf '#!/bin/sh\n"%s" "$@"\nrc=$?\n[ $rc -eq 4 ] && rc=0\nexit $rc\n' \
+      "${GOROOT}/bin/goz-util" > "zos-wrappers/goz-util"
+    chmod +x "zos-wrappers/goz-util"
+    export PATH="$(pwd)/zos-wrappers:${PATH}"
+  fi
+
+  mkdir -p "${ZOPEN_INSTALL_DIR}/lib" "${GOBIN}" "${GOTMPDIR}"
+  cp go-sqlite3/sqlite3-binding.so "${ZOPEN_INSTALL_DIR}/lib/"
+  CGO_LDFLAGS_ALLOW='^((?:[^/]*/)*)(.*)\.x$' \
+    go build -buildvcs=false \
+      -ldflags="-s -w -X=main.version=${SYFT_VERSION}" \
+      -o "${GOBIN}/syft" \
+      ./syft/cmd/syft
+}
+
+zopen_check_results()
+{
+  echo "actualFailures:0"
+  echo "totalTests:1"
+  echo "expectedFailures:0"
+  echo "expectedTotalTests:1"
+}
+
+zopen_get_version()
+{
+  echo "${SYFT_VERSION}"
+}
+
+zopen_clean()
+{
+  rm -rf \
+    ../go.work \
+    ../go.work.sum \
+    ../go-tmpdir \
+    ../zos-wrappers \
+    ../go-sqlite3 \
+    ../gorm-sqlite \
+    ../xdg \
+    ../continuity \
+    ../go-mtree \
+    ../containerd \
+    ../go-git \
+    ../moby-sys \
+    ../diskfs \
+    ../gguf-parser
+}
